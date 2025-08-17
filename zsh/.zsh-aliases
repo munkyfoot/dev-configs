@@ -1,0 +1,75 @@
+# --- Helper functions: virtualenv + project utilities ---
+#
+# This file is sourced by `.zshrc` to provide small, focused helpers.
+# Functions:
+# - venv [-f]: Activate ./venv if present; with -f, create it if missing. Prompts otherwise.
+# - mcd DIR: Create DIR (mkdir -p) then cd into it.
+# - mcursor DIR: Create DIR if missing and open it in Cursor.
+
+# venv [-f]
+# Activates a local Python virtual environment from ./venv. If not present:
+# - with -f, it will create a new venv and activate it.
+# - without -f, it interactively prompts to create one.
+# Prints colored status lines.
+venv(){
+  if [ -d "venv" ]; then
+    source venv/bin/activate
+    print -P "%F{cyan}✓ Virtual environment activated: %F{magenta}$(basename "$VIRTUAL_ENV")%f"
+  else
+    # Check for -f flag
+    local force=false
+    for arg in "$@"; do
+      if [[ "$arg" == "-f" ]]; then
+        force=true
+        break
+      fi
+    done
+    
+    if [[ "$force" == true ]]; then
+      print -P "%F{yellow}▷ Creating new virtual environment...%f"
+      python3 -m venv venv
+      print -P "%F{green}✓ New virtual environment created successfully!%f"
+      source venv/bin/activate
+      print -P "%F{cyan}✓ Virtual environment activated: %F{magenta}$(basename "$VIRTUAL_ENV")%f"
+    else
+      print -P "%F{red}✗ No venv directory found.%f"
+      print -P "%F{yellow}Create a new virtual environment? (y/N)%f"
+      read -r response
+      case "$response" in
+        [yY][eE][sS]|[yY])
+          print -P "%F{yellow}▷ Creating new virtual environment...%f"
+          python3 -m venv venv
+          print -P "%F{green}✓ New virtual environment created successfully!%f"
+          source venv/bin/activate
+          print -P "%F{cyan}✓ Virtual environment activated: %F{magenta}$(basename "$VIRTUAL_ENV")%f"
+          ;;
+        *)
+          print -P "%F{red}✗ Operation aborted.%f"
+          return 1
+          ;;
+      esac
+    fi
+  fi
+}
+
+# mcd DIR
+# Make directory if needed and cd into it.
+mcd(){
+  if [ -d "$1" ]; then
+    cd "$1"
+  else
+    mkdir -p "$1"
+    cd "$1"
+  fi
+}
+
+# mcursor DIR
+# Ensure directory exists and open it in Cursor.
+mcursor(){
+  if [ -d "$1" ]; then
+    cursor "$1"
+  else
+    mkdir -p "$1"
+    cursor "$1"
+  fi
+}

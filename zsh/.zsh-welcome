@@ -1,0 +1,105 @@
+# --- Welcome banner ---
+# Prints a friendly banner once per interactive shell.
+# - Chooses ASCII art and color based on time of day
+# - Shows Node and Python versions when available
+# Set `user_name` below to override the greeting name.
+# To disable, skip sourcing this file or unset `_WELCOME_PRINTED`.
+if [[ $- == *i* ]]; then
+  _welcome_banner() {
+
+    # Set username
+    local user_name="${USER}" # Uses system username by default, can be changed to any string. e.g. "Your Name"
+
+    # Time-of-day greeting
+    local h=$(date +%H) part="evening"
+    (( h >= 5 && h < 12 )) && part="morning"
+    (( h >= 12 && h < 17 )) && part="afternoon"
+
+    # Facts
+    # Ordinal suffix helper
+    _ordinal_suffix() {
+      local d=$((10#$1))
+      local suf="th"
+      (( d % 100 >= 11 && d % 100 <= 13 )) || case $(( d % 10 )) in
+        1) suf="st" ;;
+        2) suf="nd" ;;
+        3) suf="rd" ;;
+      esac
+      print -r -- "$suf"
+    }
+
+    local day=$((10#$(date +%d)))
+    local suffix=$(_ordinal_suffix "$day")
+    local today="$(date '+%A, %B') $day$suffix"
+    local nodev="N/A"; command -v node >/dev/null && nodev=$(node -v)
+    local pyv="N/A"
+    if command -v python3 >/dev/null; then
+      pyv=$(python3 -V 2>&1 | sed 's/Python /v/')
+    fi
+
+    # ASCII art header (time-of-day)
+    local art_color
+    case "$part" in
+      morning)   art_color="cyan" ;;
+      afternoon) art_color="yellow" ;;
+      evening)   art_color="blue" ;;
+      *)         art_color="green" ;;
+    esac
+    print -P "%F{$art_color}"
+    case "$part" in
+      morning)
+        cat <<'ART'
+    ( (
+     ) )
+  ........
+  |      |]
+  \      /
+   `----'
+ART
+        ;;
+      afternoon)
+        cat <<'ART'
+      .
+   \  |  /
+ '-.*;;;*.-'
+-==;;;;;;;==-
+ .-'*;;;*'-.
+   /  |  \
+      '
+ART
+        ;;
+      evening)
+        cat <<'ART'
+    ___
+  .'o O'-.
+ / O o_.-`\
+|o_.-`  o  |
+\     o_.-/
+  `'--.__.'
+ART
+        ;;
+      *)
+        cat <<'ART'
+ ><(((º>
+ART
+        ;;
+    esac
+    print -P "%f"
+
+    # Lines
+    print -P "%B%F{$art_color}Good ${part}, ${user_name}.%f%b It's ${today}."
+    print
+    print -P "%F{magenta}Current Environment%f"
+    print -P " - %F{green}Node%f ${nodev}"
+    print -P " - %F{green}Python%f ${pyv}"
+
+    print
+  }
+
+  # Guard so sourcing .zshrc twice doesn't reprint
+  if [[ -z "${_WELCOME_PRINTED:-}" ]]; then
+    _WELCOME_PRINTED=1
+    _welcome_banner
+  fi
+fi
+# --- end ---
