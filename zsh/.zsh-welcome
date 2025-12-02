@@ -1,14 +1,30 @@
 # --- Welcome banner ---
 # Prints a friendly banner once per interactive shell.
 # - Chooses ASCII art and color based on time of day
+# - Converts custom images to ASCII art if available
 # - Shows Node and Python versions when available
 # Set `user_name` below to override the greeting name.
+# Set `welcome_images_dir` to specify custom image directory.
 # To disable, skip sourcing this file or unset `_WELCOME_PRINTED`.
+
+# Get the absolute directory where this script is located
+typeset -g _WELCOME_SCRIPT_DIR="${_WELCOME_SCRIPT_DIR:-${${(%):-%x}:A:h}}"
+
+# Source the image-to-ASCII converter
+source "${_WELCOME_SCRIPT_DIR}/.zsh-img2ascii"
+
+# Capture terminal width at shell startup (before any resizing)
+typeset -g _WELCOME_TERM_WIDTH="${_WELCOME_TERM_WIDTH:-$(tput cols)}"
+
 if [[ $- == *i* ]]; then
   _welcome_banner() {
 
     # Set username
     local user_name="${USER}" # Uses system username by default, can be changed to any string. e.g. "Your Name"
+    
+    # Directory containing custom welcome images (morning.*, afternoon.*, evening.*, custom.*)
+    # Supported formats: png, jpg, jpeg, gif, bmp, webp
+    local welcome_images_dir="${WELCOME_IMAGES_DIR:-${_WELCOME_SCRIPT_DIR}/welcome-images}"
 
     # Time-of-day greeting
     local h=$(date +%H) part="evening"
@@ -37,6 +53,48 @@ if [[ $- == *i* ]]; then
       pyv=$(python3 -V 2>&1 | sed 's/Python /v/')
     fi
 
+    # Preset ASCII art fallback
+    _welcome_preset_art() {
+      case "$1" in
+        morning)
+          cat <<'ART'
+    ( (
+     ) )
+  ........
+  |      |]
+  \      /
+   `----'
+ART
+          ;;
+        afternoon)
+          cat <<'ART'
+      .
+   \  |  /
+ '-.*;;;*.-'
+-==;;;;;;;==-
+ .-'*;;;*'-.
+   /  |  \
+      '
+ART
+          ;;
+        evening)
+          cat <<'ART'
+    ___
+  .'o O'-.
+ / O o_.-`\
+|o_.-`  o  |
+\     o_.-/
+ `'--.__.'
+ART
+          ;;
+        *)
+          cat <<'ART'
+ ><(((º>
+ART
+          ;;
+      esac
+    }
+
     # ASCII art header (time-of-day)
     local art_color
     case "$part" in
@@ -46,44 +104,36 @@ if [[ $- == *i* ]]; then
       *)         art_color="green" ;;
     esac
     print -P "%F{$art_color}"
-    case "$part" in
-      morning)
-        cat <<'ART'
-    ( (
-     ) )
-  ........
-  |      |]
-  \      /
-   `----'
-ART
-        ;;
-      afternoon)
-        cat <<'ART'
-      .
-   \  |  /
- '-.*;;;*.-'
--==;;;;;;;==-
- .-'*;;;*'-.
-   /  |  \
-      '
-ART
-        ;;
-      evening)
-        cat <<'ART'
-    ___
-  .'o O'-.
- / O o_.-`\
-|o_.-`  o  |
-\     o_.-/
- `'--.__.'
-ART
-        ;;
-      *)
-        cat <<'ART'
- ><(((º>
-ART
-        ;;
-    esac
+    
+    # Try to find and convert custom image, fall back to preset ASCII art
+    local custom_image=""
+    local image_extensions=("png" "jpg" "jpeg" "gif" "bmp" "webp")
+    
+    for ext in "${image_extensions[@]}"; do
+      if
+       [[ -f "${welcome_images_dir}/${part}.${ext}" ]]; then
+        custom_image="${welcome_images_dir}/${part}.${ext}"
+        break
+      elif [[ -f "${welcome_images_dir}/custom.${ext}" ]]; then
+        custom_image="${welcome_images_dir}/custom.${ext}"
+        break
+      fi
+    done
+    
+    if [[ -n "$custom_image" ]] && { command -v img2ascii >/dev/null 2>&1 || typeset -f img2ascii >/dev/null 2>&1; }; then
+      # Use custom image converted to ASCII art at initial terminal width
+      local ascii_art
+      ascii_art=$(img2ascii "$custom_image" "$_WELCOME_TERM_WIDTH" 2>/dev/null)
+      if [[ -n "$ascii_art" ]]; then
+        print -r -- "$ascii_art"
+      else
+        # Fall back to preset if conversion fails
+        _welcome_preset_art "$part"
+      fi
+    else
+      # Use preset ASCII art
+      _welcome_preset_art "$part"
+    fi
     print -P "%f"
 
     # Lines
