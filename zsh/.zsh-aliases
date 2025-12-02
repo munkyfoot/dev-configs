@@ -69,3 +69,12 @@ mcode(){
     code "$1"
   fi
 }
+
+# help message
+help(){
+  print -P "%F{cyan}Available helper functions:%f"
+  print -P "%F{yellow}venv [-f]%f - Activate local Python virtualenv; with -f, create if missing."
+  print -P "%F{yellow}mcd DIR%f - Create DIR (if needed) and cd into it."
+  print -P "%F{yellow}mcode DIR%f - Create DIR (if needed) and open it in VS Code."
+}
+# --- end ---
