@@ -46,18 +46,15 @@ build_prompt() {
 add-zsh-hook precmd build_prompt
 
 # Auto-refresh prompt every second (updates clock and catches external git changes)
-TMOUT=1
 TRAPALRM() {
-  # Only refresh if shell is idle (no command running)
-  if [[ -z "$_ZSH_CMD_RUNNING" ]]; then
-    build_prompt
-    zle reset-prompt 2>/dev/null
-  fi
+  build_prompt
+  zle reset-prompt 2>/dev/null
 }
 
-# Track when a command is running to avoid refresh during execution
-_zsh_cmd_preexec() { _ZSH_CMD_RUNNING=1; }
-_zsh_cmd_precmd()  { unset _ZSH_CMD_RUNNING; }
+# Disable timer during command execution, re-enable when idle at prompt
+_zsh_cmd_preexec() { unset TMOUT; }
+_zsh_cmd_precmd()  { TMOUT=1; }
 add-zsh-hook preexec _zsh_cmd_preexec
 add-zsh-hook precmd _zsh_cmd_precmd
+TMOUT=1
 # --- end ---
