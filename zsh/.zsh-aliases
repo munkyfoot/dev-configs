@@ -7,48 +7,44 @@
 # - mcursor DIR: Create DIR if missing and open it in Cursor.
 
 # venv [-f]
-# Activates a local Python virtual environment from ./venv. If not present:
+# Activates a local Python virtual environment from ./(.)venv. If not present:
 # - with -f, it will create a new venv and activate it.
 # - without -f, it interactively prompts to create one.
 # Prints colored status lines.
 venv(){
-  if [ -d "venv" ]; then
-    source venv/bin/activate
+  # Helper to activate and print success
+  _venv_activate(){
+    source "$1/bin/activate"
     print -P "%F{cyan}✓ Virtual environment activated: %F{magenta}$(basename "$VIRTUAL_ENV")%f"
+  }
+
+  # Helper to create venv and activate
+  _venv_create(){
+    print -P "%F{yellow}▷ Creating new virtual environment...%f"
+    python3 -m venv .venv
+    print -P "%F{green}✓ New virtual environment created successfully!%f"
+    _venv_activate .venv
+  }
+
+  if [ -d ".venv" ]; then
+    _venv_activate .venv
+  elif [ -d "venv" ]; then
+    _venv_activate venv
+  elif [[ "$1" == "-f" ]]; then
+    _venv_create
   else
-    # Check for -f flag
-    local force=false
-    for arg in "$@"; do
-      if [[ "$arg" == "-f" ]]; then
-        force=true
-        break
-      fi
-    done
-    
-    if [[ "$force" == true ]]; then
-      print -P "%F{yellow}▷ Creating new virtual environment...%f"
-      python3 -m venv venv
-      print -P "%F{green}✓ New virtual environment created successfully!%f"
-      source venv/bin/activate
-      print -P "%F{cyan}✓ Virtual environment activated: %F{magenta}$(basename "$VIRTUAL_ENV")%f"
-    else
-      print -P "%F{red}✗ No venv directory found.%f"
-      print -P "%F{yellow}Create a new virtual environment? (y/N)%f"
-      read -r response
-      case "$response" in
-        [yY][eE][sS]|[yY])
-          print -P "%F{yellow}▷ Creating new virtual environment...%f"
-          python3 -m venv venv
-          print -P "%F{green}✓ New virtual environment created successfully!%f"
-          source venv/bin/activate
-          print -P "%F{cyan}✓ Virtual environment activated: %F{magenta}$(basename "$VIRTUAL_ENV")%f"
-          ;;
-        *)
-          print -P "%F{red}✗ Operation aborted.%f"
-          return 1
-          ;;
-      esac
-    fi
+    print -P "%F{red}✗ No venv directory found.%f"
+    print -P "%F{yellow}Create a new virtual environment? (y/N)%f"
+    read -r response
+    case "$response" in
+      [yY][eE][sS]|[yY])
+        _venv_create
+        ;;
+      *)
+        print -P "%F{red}✗ Operation aborted.%f"
+        return 1
+        ;;
+    esac
   fi
 }
 
@@ -63,13 +59,13 @@ mcd(){
   fi
 }
 
-# mcursor DIR
-# Ensure directory exists and open it in Cursor.
-mcursor(){
+# mcode DIR
+# Ensure directory exists and open it in VS Code.
+mcode(){
   if [ -d "$1" ]; then
-    cursor "$1"
+    code "$1"
   else
     mkdir -p "$1"
-    cursor "$1"
+    code "$1"
   fi
 }
