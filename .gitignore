@@ -3,3 +3,6 @@
 
 # Welcome images
 welcome-images/
+
+# ASCII art cache
+.ascii-cache/

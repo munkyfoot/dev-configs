@@ -122,8 +122,40 @@ ART
     
     if [[ -n "$custom_image" ]] && { command -v img2ascii >/dev/null 2>&1 || typeset -f img2ascii >/dev/null 2>&1; }; then
       # Use custom image converted to ASCII art at initial terminal width
-      local ascii_art
-      ascii_art=$(img2ascii "$custom_image" "$_WELCOME_TERM_WIDTH" 2>/dev/null)
+      # Check for cached ASCII art version
+      local cache_dir="${welcome_images_dir}/.ascii-cache"
+      local image_basename="${custom_image:t:r}"
+      local cache_file="${cache_dir}/${image_basename}_w${_WELCOME_TERM_WIDTH}.txt"
+      local ascii_art=""
+      local need_generate=0
+      
+      # Check if cache exists and is up to date
+      if [[ -f "$cache_file" ]]; then
+        # Compare modification times (image newer than cache = regenerate)
+        local image_mtime cache_mtime
+        image_mtime=$(stat -f %m "$custom_image" 2>/dev/null)
+        cache_mtime=$(stat -f %m "$cache_file" 2>/dev/null)
+        if [[ -n "$image_mtime" && -n "$cache_mtime" && "$image_mtime" -gt "$cache_mtime" ]]; then
+          need_generate=1
+        else
+          # Use cached version
+          ascii_art=$(<"$cache_file")
+        fi
+      else
+        need_generate=1
+      fi
+      
+      # Generate and cache if needed
+      if (( need_generate )); then
+        ascii_art=$(img2ascii "$custom_image" "$_WELCOME_TERM_WIDTH" 2>/dev/null)
+        if [[ -n "$ascii_art" ]]; then
+          # Create cache directory if it doesn't exist
+          [[ -d "$cache_dir" ]] || mkdir -p "$cache_dir"
+          # Save to cache
+          print -r -- "$ascii_art" > "$cache_file"
+        fi
+      fi
+      
       if [[ -n "$ascii_art" ]]; then
         print -r -- "$ascii_art"
       else
