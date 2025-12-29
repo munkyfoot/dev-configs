@@ -1,0 +1,48 @@
+# --- simple, colored prompt with venv, git, SSH user@host when applicable ---
+# Format: "%time [user@host] path git_branch[+*] (venv) ❯"
+# - Shows user@host only over SSH.
+# - Appends "+" for staged changes and "*" for unstaged or untracked changes.
+# - Updates on each prompt (no 1s timer in bash).
+
+_BASH_PROMPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DC_SHARED_DIR="${DC_SHARED_DIR:-${_BASH_PROMPT_DIR}/../shared}"
+source "${DC_SHARED_DIR}/prompt.sh"
+
+_BASH_C_RESET='\[\e[0m\]'
+_BASH_C_GRAY='\[\e[90m\]'
+_BASH_C_BLUE='\[\e[34m\]'
+_BASH_C_CYAN='\[\e[36m\]'
+_BASH_C_MAGENTA='\[\e[35m\]'
+_BASH_C_GREEN='\[\e[32m\]'
+
+__build_bash_prompt() {
+  local ssh_part=""
+  if [[ -n "$SSH_CONNECTION" || -n "$SSH_TTY" ]]; then
+    ssh_part='\u@\h'
+  fi
+
+  local git venv
+  git="$(prompt_git)"
+  venv="$(prompt_venv)"
+
+  local segs="${_BASH_C_GRAY}\t${_BASH_C_RESET}"
+  [[ -n "$ssh_part" ]] && segs+=" ${ssh_part}"
+  segs+=" ${_BASH_C_BLUE}\W${_BASH_C_RESET}"
+  [[ -n "$git" ]] && segs+=" ${_BASH_C_CYAN}${git}${_BASH_C_RESET}"
+  [[ -n "$venv" ]] && segs+=" ${_BASH_C_MAGENTA}${venv}${_BASH_C_RESET}"
+
+  PS1="${segs} ${_BASH_C_GREEN}❯${_BASH_C_RESET} "
+}
+
+if [[ -z "${_BASH_PROMPT_LOADED:-}" ]]; then
+  _BASH_PROMPT_LOADED=1
+  if [[ -n "${PROMPT_COMMAND:-}" ]]; then
+    case ";$PROMPT_COMMAND;" in
+      *";__build_bash_prompt;"*) ;;
+      *) PROMPT_COMMAND="__build_bash_prompt; ${PROMPT_COMMAND}" ;;
+    esac
+  else
+    PROMPT_COMMAND="__build_bash_prompt"
+  fi
+fi
+# --- end ---

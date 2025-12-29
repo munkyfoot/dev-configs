@@ -7,19 +7,16 @@
 # Set `WELCOME_IMAGES_DIR` to specify custom image directory.
 # To disable, skip sourcing this file or unset `_WELCOME_PRINTED`.
 
-# Get the absolute directory where this script is located
-typeset -g _WELCOME_SCRIPT_DIR="${_WELCOME_SCRIPT_DIR:-${${(%):-%x}:A:h}}"
-
-# Shared helpers
-typeset -g DC_SHARED_DIR="${DC_SHARED_DIR:-${_WELCOME_SCRIPT_DIR}/../shared}"
+_BASH_WELCOME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DC_SHARED_DIR="${DC_SHARED_DIR:-${_BASH_WELCOME_DIR}/../shared}"
 source "${DC_SHARED_DIR}/img2ascii.sh"
 source "${DC_SHARED_DIR}/welcome.sh"
 
 if [[ $- == *i* ]]; then
-  # Guard so sourcing .zshrc twice doesn't reprint
+  # Guard so sourcing .bashrc twice doesn't reprint
   if [[ -z "${_WELCOME_PRINTED:-}" ]]; then
     _WELCOME_PRINTED=1
-    dc_welcome_banner "$_WELCOME_SCRIPT_DIR"
+    dc_welcome_banner "$_BASH_WELCOME_DIR"
   fi
 fi
 # --- end ---

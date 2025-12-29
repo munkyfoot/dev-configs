@@ -1,0 +1,10 @@
+# ANSI color helpers for shell output (not prompt strings).
+_dc_color_reset=$'\033[0m'
+_dc_color_bold=$'\033[1m'
+_dc_color_red=$'\033[31m'
+_dc_color_green=$'\033[32m'
+_dc_color_yellow=$'\033[33m'
+_dc_color_blue=$'\033[34m'
+_dc_color_magenta=$'\033[35m'
+_dc_color_cyan=$'\033[36m'
+_dc_color_gray=$'\033[90m'

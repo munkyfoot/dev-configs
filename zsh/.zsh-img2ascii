@@ -1,121 +1,13 @@
 #!/usr/bin/env zsh
 # --- Image to ASCII Art Converter ---
-# Converts an image to ASCII art sized to terminal width.
-# Usage: img2ascii <image_path> [width]
-# Requires: ImageMagick (convert command)
+# Shared implementation lives in shared/img2ascii.sh
 
-img2ascii() {
-  local image_path="$1"
-  local width="${2:-$(tput cols)}"
-  
-  # Check if image exists
-  if [[ ! -f "$image_path" ]]; then
-    return 1
-  fi
-  
-  # Check if ImageMagick is available
-  if ! command -v magick >/dev/null 2>&1 && ! command -v convert >/dev/null 2>&1; then
-    echo "Error: ImageMagick is required but not installed." >&2
-    echo "Install with: brew install imagemagick" >&2
-    return 1
-  fi
-  
-  # ASCII characters from dark to light (reversed for typical dark terminal backgrounds)
-  local chars=' .:-=+*#%@'
-  local chars_len=${#chars}
-  
-  # Calculate height based on aspect ratio (terminal chars are ~2x taller than wide)
-  local aspect_ratio=0.5
-  
-  # Get image dimensions using ImageMagick
-  local img_info
-  if command -v magick >/dev/null 2>&1; then
-    img_info=$(magick identify -format "%w %h" "$image_path" 2>/dev/null)
-  else
-    img_info=$(identify -format "%w %h" "$image_path" 2>/dev/null)
-  fi
-  
-  if [[ -z "$img_info" ]]; then
-    return 1
-  fi
-  
-  local img_width=${img_info%% *}
-  local img_height=${img_info##* }
-  
-  # Calculate output height maintaining aspect ratio
-  local height=$(( (width * img_height * aspect_ratio) / img_width ))
-  # Ensure minimum height of 1
-  (( height < 1 )) && height=1
-  
-  # Convert image to RGB, resize, and get pixel values
-  local pixel_data
-  if command -v magick >/dev/null 2>&1; then
-    pixel_data=$(magick "$image_path" \
-      -resize "${width}x${height}!" \
-      -depth 8 \
-      txt:- 2>/dev/null | tail -n +2)
-  else
-    pixel_data=$(convert "$image_path" \
-      -resize "${width}x${height}!" \
-      -depth 8 \
-      txt:- 2>/dev/null | tail -n +2)
-  fi
-  
-  if [[ -z "$pixel_data" ]]; then
-    return 1
-  fi
-  
-  # Parse pixel data and convert to ASCII
-  local output=""
-  local current_row=0
-  local line=""
-  local coords x y r g b gray_value char_idx
-  
-  while IFS= read -r pixel_line; do
-    # Extract coordinates and RGB values
-    # Format: "x,y: (R,G,B)  #RRGGBB  srgb(r,g,b)"
-    coords="${pixel_line%%:*}"
-    x="${coords%%,*}"
-    y="${coords##*,}"
-    
-    # Extract RGB values from the line
-    if [[ "$pixel_line" =~ \(([0-9]+),([0-9]+),([0-9]+) ]]; then
-      r="${match[1]}"
-      g="${match[2]}"
-      b="${match[3]}"
-      # Calculate grayscale for character selection (luminance formula)
-      gray_value=$(( (r * 299 + g * 587 + b * 114) / 1000 ))
-    elif [[ "$pixel_line" =~ \#([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})([0-9A-Fa-f]{2}) ]]; then
-      # Convert hex to decimal
-      r=$((16#${match[1]}))
-      g=$((16#${match[2]}))
-      b=$((16#${match[3]}))
-      gray_value=$(( (r * 299 + g * 587 + b * 114) / 1000 ))
-    else
-      r=128; g=128; b=128
-      gray_value=128
-    fi
-    
-    # Handle row change
-    if (( y > current_row )); then
-      output+="${line}\033[0m\n"
-      line=""
-      current_row=$y
-    fi
-    
-    # Map gray value (0-255) to character index
-    char_idx=$(( (gray_value * (chars_len - 1)) / 255 ))
-    # Add ANSI true color escape code for the character
-    line+="\033[38;2;${r};${g};${b}m${chars:$char_idx:1}"
-    
-  done <<< "$pixel_data"
-  
-  # Add final line and reset color
-  [[ -n "$line" ]] && output+="${line}\033[0m\n"
-  
-  # Print result
-  print -n "$output"
-}
+# Get the absolute directory where this script is located
+typeset -g _IMG2ASCII_SCRIPT_DIR="${_IMG2ASCII_SCRIPT_DIR:-${${(%):-%x}:A:h}}"
+
+# Shared helpers
+typeset -g DC_SHARED_DIR="${DC_SHARED_DIR:-${_IMG2ASCII_SCRIPT_DIR}/../shared}"
+source "${DC_SHARED_DIR}/img2ascii.sh"
 
 # Run if called directly
 if [[ "${(%):-%N}" == "$0" ]]; then

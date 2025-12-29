@@ -1,80 +1,12 @@
 # --- Helper functions: virtualenv + project utilities ---
 #
 # This file is sourced by `.zshrc` to provide small, focused helpers.
-# Functions:
-# - venv [-f]: Activate ./venv if present; with -f, create it if missing. Prompts otherwise.
-# - mcd DIR: Create DIR (mkdir -p) then cd into it.
-# - mcursor DIR: Create DIR if missing and open it in Cursor.
+# Logic is shared across shells in `shared/aliases.sh`.
 
-# venv [-f]
-# Activates a local Python virtual environment from ./(.)venv. If not present:
-# - with -f, it will create a new venv and activate it.
-# - without -f, it interactively prompts to create one.
-# Prints colored status lines.
-venv(){
-  # Helper to activate and print success
-  _venv_activate(){
-    source "$1/bin/activate"
-    print -P "%F{cyan}✓ Virtual environment activated: %F{magenta}$(basename "$VIRTUAL_ENV")%f"
-  }
+# Get the absolute directory where this script is located
+typeset -g _ALIASES_SCRIPT_DIR="${_ALIASES_SCRIPT_DIR:-${${(%):-%x}:A:h}}"
 
-  # Helper to create venv and activate
-  _venv_create(){
-    print -P "%F{yellow}▷ Creating new virtual environment...%f"
-    python3 -m venv .venv
-    print -P "%F{green}✓ New virtual environment created successfully!%f"
-    _venv_activate .venv
-  }
-
-  if [ -d ".venv" ]; then
-    _venv_activate .venv
-  elif [ -d "venv" ]; then
-    _venv_activate venv
-  elif [[ "$1" == "-f" ]]; then
-    _venv_create
-  else
-    print -P "%F{red}✗ No venv directory found.%f"
-    print -P "%F{yellow}Create a new virtual environment? (y/N)%f"
-    read -r response
-    case "$response" in
-      [yY][eE][sS]|[yY])
-        _venv_create
-        ;;
-      *)
-        print -P "%F{red}✗ Operation aborted.%f"
-        return 1
-        ;;
-    esac
-  fi
-}
-
-# mcd DIR
-# Make directory if needed and cd into it.
-mcd(){
-  if [ -d "$1" ]; then
-    cd "$1"
-  else
-    mkdir -p "$1"
-    cd "$1"
-  fi
-}
-
-# mcode DIR
-# Ensure directory exists and open it in VS Code.
-mcode(){
-  if [ -d "$1" ]; then
-    code "$1"
-  else
-    mkdir -p "$1"
-    code "$1"
-  fi
-}
-
-# help message
-help(){
-  print -P "%F{cyan}Available helper functions:%f"
-  print -P "%F{yellow}venv [-f]%f - Activate local Python virtualenv; with -f, create if missing."
-  print -P "%F{yellow}mcd DIR%f - Create DIR (if needed) and cd into it."
-  print -P "%F{yellow}mcode DIR%f - Create DIR (if needed) and open it in VS Code."
-}
+# Shared helpers
+typeset -g DC_SHARED_DIR="${DC_SHARED_DIR:-${_ALIASES_SCRIPT_DIR}/../shared}"
+source "${DC_SHARED_DIR}/aliases.sh"
 # --- end ---

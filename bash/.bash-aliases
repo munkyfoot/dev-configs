@@ -1,0 +1,9 @@
+# --- Helper functions: virtualenv + project utilities ---
+#
+# This file is sourced by `.bashrc` to provide small, focused helpers.
+# Logic is shared across shells in `shared/aliases.sh`.
+
+_BASH_ALIASES_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DC_SHARED_DIR="${DC_SHARED_DIR:-${_BASH_ALIASES_DIR}/../shared}"
+source "${DC_SHARED_DIR}/aliases.sh"
+# --- end ---
