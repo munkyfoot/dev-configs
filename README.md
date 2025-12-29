@@ -13,7 +13,7 @@ A clean, informative prompt showing:
 - Current time
 - `user@host` when SSH'd into remote machines
 - Current directory (abbreviated)
-- Git branch/status with `*` for dirty repos
+- Git branch/status with `+` for staged and `*` for unstaged/untracked changes
 - Active Python virtual environment
 - Green caret prompt
 
