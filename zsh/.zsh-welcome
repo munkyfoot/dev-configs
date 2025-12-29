@@ -4,19 +4,23 @@
 # - Converts custom images to ASCII art if available
 # - Shows Node and Python versions when available
 # Set `user_name` below to override the greeting name.
-# Set `welcome_images_dir` to specify custom image directory.
+# Set `WELCOME_IMAGES_DIR` to specify custom image directory.
 # To disable, skip sourcing this file or unset `_WELCOME_PRINTED`.
 
 # Get the absolute directory where this script is located
 typeset -g _WELCOME_SCRIPT_DIR="${_WELCOME_SCRIPT_DIR:-${${(%):-%x}:A:h}}"
 
-# Source the image-to-ASCII converter
-source "${_WELCOME_SCRIPT_DIR}/.zsh-img2ascii"
-
-# Capture terminal width at shell startup (before any resizing)
-typeset -g _WELCOME_TERM_WIDTH="${_WELCOME_TERM_WIDTH:-$(tput cols)}"
-
 if [[ $- == *i* ]]; then
+  # Source the image-to-ASCII converter if available
+  [[ -r "${_WELCOME_SCRIPT_DIR}/.zsh-img2ascii" ]] && source "${_WELCOME_SCRIPT_DIR}/.zsh-img2ascii"
+
+  # Capture terminal width at shell startup (before any resizing)
+  typeset -g _WELCOME_TERM_WIDTH="${_WELCOME_TERM_WIDTH:-${COLUMNS:-}}"
+  if [[ -z "${_WELCOME_TERM_WIDTH}" ]]; then
+    _WELCOME_TERM_WIDTH="$(tput cols 2>/dev/null)"
+  fi
+  [[ -n "${_WELCOME_TERM_WIDTH}" ]] || _WELCOME_TERM_WIDTH=80
+
   _welcome_banner() {
 
     # Set username
@@ -108,17 +112,32 @@ ART
     # Try to find and convert custom image, fall back to preset ASCII art
     local custom_image=""
     local image_extensions=("png" "jpg" "jpeg" "gif" "bmp" "webp")
-    
+
     for ext in "${image_extensions[@]}"; do
-      if
-       [[ -f "${welcome_images_dir}/${part}.${ext}" ]]; then
+      if [[ -f "${welcome_images_dir}/${part}.${ext}" ]]; then
         custom_image="${welcome_images_dir}/${part}.${ext}"
-        break
-      elif [[ -f "${welcome_images_dir}/custom.${ext}" ]]; then
-        custom_image="${welcome_images_dir}/custom.${ext}"
         break
       fi
     done
+
+    if [[ -z "$custom_image" ]]; then
+      for ext in "${image_extensions[@]}"; do
+        if [[ -f "${welcome_images_dir}/custom.${ext}" ]]; then
+          custom_image="${welcome_images_dir}/custom.${ext}"
+          break
+        fi
+      done
+    fi
+
+    _file_mtime() {
+      local path="$1"
+      local mtime=""
+      mtime=$(stat -f %m "$path" 2>/dev/null)
+      if [[ -z "$mtime" ]]; then
+        mtime=$(stat -c %Y "$path" 2>/dev/null)
+      fi
+      print -r -- "$mtime"
+    }
     
     if [[ -n "$custom_image" ]] && { command -v img2ascii >/dev/null 2>&1 || typeset -f img2ascii >/dev/null 2>&1; }; then
       # Use custom image converted to ASCII art at initial terminal width
@@ -133,8 +152,8 @@ ART
       if [[ -f "$cache_file" ]]; then
         # Compare modification times (image newer than cache = regenerate)
         local image_mtime cache_mtime
-        image_mtime=$(stat -f %m "$custom_image" 2>/dev/null)
-        cache_mtime=$(stat -f %m "$cache_file" 2>/dev/null)
+        image_mtime=$(_file_mtime "$custom_image")
+        cache_mtime=$(_file_mtime "$cache_file")
         if [[ -n "$image_mtime" && -n "$cache_mtime" && "$image_mtime" -gt "$cache_mtime" ]]; then
           need_generate=1
         else
