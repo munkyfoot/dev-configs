@@ -45,16 +45,35 @@ img2ascii() {
       -depth 8 \
       txt:- 2>/dev/null | tail -n +2 | awk -v chars="$chars" -v chars_len="$chars_len" '
         BEGIN { esc = sprintf("%c", 27); current_row = -1; line = "" }
+        function hex2dec(h,   i, c, n, v) {
+          n = 0
+          for (i = 1; i <= length(h); i++) {
+            c = substr(h, i, 1)
+            if (c ~ /[0-9]/) v = c + 0
+            else if (c ~ /[A-F]/) v = 10 + index("ABCDEF", c) - 1
+            else v = 10 + index("abcdef", c) - 1
+            n = (n * 16) + v
+          }
+          return n
+        }
         {
           coord = $1
           sub(/:$/, "", coord)
           split(coord, xy, ",")
           y = xy[2]
-          if (match($0, /\(([0-9]+),([0-9]+),([0-9]+)\)/, rgb)) {
-            r = rgb[1]; g = rgb[2]; b = rgb[3]
-          } else {
-            r = 128; g = 128; b = 128
+
+          r = 128; g = 128; b = 128
+          if (match($0, /\([0-9]+,[0-9]+,[0-9]+\)/)) {
+            rgb = substr($0, RSTART + 1, RLENGTH - 2)
+            split(rgb, parts, ",")
+            r = parts[1]; g = parts[2]; b = parts[3]
+          } else if (match($0, /#[0-9A-Fa-f]{6}/)) {
+            hex = substr($0, RSTART + 1, 6)
+            r = hex2dec(substr(hex, 1, 2))
+            g = hex2dec(substr(hex, 3, 2))
+            b = hex2dec(substr(hex, 5, 2))
           }
+
           if (y != current_row) {
             if (current_row != -1) {
               print line esc "[0m"
@@ -77,16 +96,35 @@ img2ascii() {
       -depth 8 \
       txt:- 2>/dev/null | tail -n +2 | awk -v chars="$chars" -v chars_len="$chars_len" '
         BEGIN { esc = sprintf("%c", 27); current_row = -1; line = "" }
+        function hex2dec(h,   i, c, n, v) {
+          n = 0
+          for (i = 1; i <= length(h); i++) {
+            c = substr(h, i, 1)
+            if (c ~ /[0-9]/) v = c + 0
+            else if (c ~ /[A-F]/) v = 10 + index("ABCDEF", c) - 1
+            else v = 10 + index("abcdef", c) - 1
+            n = (n * 16) + v
+          }
+          return n
+        }
         {
           coord = $1
           sub(/:$/, "", coord)
           split(coord, xy, ",")
           y = xy[2]
-          if (match($0, /\(([0-9]+),([0-9]+),([0-9]+)\)/, rgb)) {
-            r = rgb[1]; g = rgb[2]; b = rgb[3]
-          } else {
-            r = 128; g = 128; b = 128
+
+          r = 128; g = 128; b = 128
+          if (match($0, /\([0-9]+,[0-9]+,[0-9]+\)/)) {
+            rgb = substr($0, RSTART + 1, RLENGTH - 2)
+            split(rgb, parts, ",")
+            r = parts[1]; g = parts[2]; b = parts[3]
+          } else if (match($0, /#[0-9A-Fa-f]{6}/)) {
+            hex = substr($0, RSTART + 1, 6)
+            r = hex2dec(substr(hex, 1, 2))
+            g = hex2dec(substr(hex, 3, 2))
+            b = hex2dec(substr(hex, 5, 2))
           }
+
           if (y != current_row) {
             if (current_row != -1) {
               print line esc "[0m"
