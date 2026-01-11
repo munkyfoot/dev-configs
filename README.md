@@ -27,6 +27,7 @@ Personalized terminal greeting with:
 
 - Time-of-day adapted greeting
 - ASCII art that changes throughout the day
+- Optional custom ASCII art (`morning.txt`, `afternoon.txt`, `evening.txt`, or `custom.txt`) in `welcome-images` or `WELCOME_IMAGES_DIR`
 - Today's date with ordinal suffixes
 - Environment snapshot (Node.js and Python versions)
 - Session-aware display (shows once per session)
@@ -89,6 +90,7 @@ Personalized terminal greeting with:
 
 - Time-of-day adapted greeting
 - ASCII art that changes throughout the day
+- Optional custom ASCII art (`morning.txt`, `afternoon.txt`, `evening.txt`, or `custom.txt`) in `welcome-images` or `WELCOME_IMAGES_DIR`
 - Today's date with ordinal suffixes
 - Environment snapshot (Node.js and Python versions)
 - Session-aware display (shows once per session)

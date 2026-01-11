@@ -77,6 +77,27 @@ _dc_find_custom_image() {
   done
 }
 
+_dc_find_custom_ascii() {
+  local welcome_images_dir="$1"
+  local part="$2"
+  local ext
+  local ascii_extensions=("txt" "ascii" "asc" "art")
+
+  for ext in "${ascii_extensions[@]}"; do
+    if [[ -f "${welcome_images_dir}/${part}.${ext}" ]]; then
+      printf '%s' "${welcome_images_dir}/${part}.${ext}"
+      return 0
+    fi
+  done
+
+  for ext in "${ascii_extensions[@]}"; do
+    if [[ -f "${welcome_images_dir}/custom.${ext}" ]]; then
+      printf '%s' "${welcome_images_dir}/custom.${ext}"
+      return 0
+    fi
+  done
+}
+
 _dc_file_mtime() {
   local path="$1"
   local mtime=""
@@ -129,11 +150,14 @@ dc_welcome_banner() {
   esac
   printf '%s' "$art_color"
 
-  # Try to find and convert custom image, fall back to preset ASCII art
-  local custom_image
+  # Try to use custom ASCII art or convert custom image, fall back to preset ASCII art
+  local custom_ascii custom_image
+  custom_ascii=$(_dc_find_custom_ascii "$welcome_images_dir" "$part")
   custom_image=$(_dc_find_custom_image "$welcome_images_dir" "$part")
 
-  if [[ -n "$custom_image" ]] && command -v img2ascii >/dev/null 2>&1; then
+  if [[ -n "$custom_ascii" ]]; then
+    cat "$custom_ascii"
+  elif [[ -n "$custom_image" ]] && command -v img2ascii >/dev/null 2>&1; then
     local cache_dir="${welcome_images_dir}/.ascii-cache"
     local image_basename cache_file ascii_art need_generate=0
     local term_width

@@ -1,10 +1,11 @@
 # --- Welcome banner ---
 # Prints a friendly banner once per interactive shell.
 # - Chooses ASCII art and color based on time of day
-# - Converts custom images to ASCII art if available
+# - Uses custom ASCII art or converts custom images to ASCII art if available
 # - Shows Node and Python versions when available
 # Set `WELCOME_USER_NAME` to override the greeting name.
-# Set `WELCOME_IMAGES_DIR` to specify custom image directory.
+# Set `WELCOME_IMAGES_DIR` to specify custom art/image directory.
+# Add `morning.txt`/`afternoon.txt`/`evening.txt` or `custom.txt` alongside images.
 # To disable, skip sourcing this file or unset `_WELCOME_PRINTED`.
 
 # Get the absolute directory where this script is located
