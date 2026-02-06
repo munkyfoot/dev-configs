@@ -8,21 +8,38 @@ prompt_venv() {
 # Prints the current git branch or tag; appends "+" for staged and "*" for unstaged/untracked changes.
 prompt_git() {
   command -v git >/dev/null 2>&1 || return
-  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return
+  local status_out branch oid staged="" dirty="" line tmp xy x y
+  status_out="$(git status --porcelain=2 --branch --ignore-submodules=dirty 2>/dev/null)" || return
 
-  local b staged="" dirty=""
-  b=$(git symbolic-ref --quiet --short HEAD 2>/dev/null \
-      || git describe --tags --exact-match 2>/dev/null \
-      || git rev-parse --short HEAD 2>/dev/null) || return
+  while IFS= read -r line; do
+    case "$line" in
+      '# branch.head '*)
+        branch="${line#\# branch.head }"
+        ;;
+      '# branch.oid '*)
+        oid="${line#\# branch.oid }"
+        ;;
+      '1 '*|'2 '*|'u '*)
+        tmp="${line#? }"
+        xy="${tmp%% *}"
+        x="${xy%?}"
+        y="${xy#?}"
+        [[ "$x" != "." ]] && staged="+"
+        [[ "$y" != "." ]] && dirty="*"
+        ;;
+      '? '*)
+        dirty="*"
+        ;;
+    esac
+  done <<< "$status_out"
 
-  git diff --quiet --ignore-submodules --cached || staged="+"
-  git diff --quiet --ignore-submodules || dirty="*"
-
-  if [[ -z "$dirty" ]]; then
-    if git ls-files --others --exclude-standard --directory --no-empty-directory 2>/dev/null | read -r _; then
-      dirty="*"
-    fi
+  if [[ -z "$branch" || "$branch" == "(detached)" ]]; then
+    branch="$(git describe --tags --exact-match 2>/dev/null)"
+  fi
+  if [[ -z "$branch" || "$branch" == "(detached)" ]]; then
+    [[ -n "$oid" && "$oid" != "(initial)" ]] || return
+    branch="${oid:0:7}"
   fi
 
-  printf '%s' "$b$staged$dirty"
+  printf '%s' "${branch}${staged}${dirty}"
 }

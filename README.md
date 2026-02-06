@@ -28,6 +28,7 @@ Personalized terminal greeting with:
 - Time-of-day adapted greeting
 - ASCII art that changes throughout the day
 - Optional custom ASCII art (`morning.txt`, `afternoon.txt`, `evening.txt`, or `custom.txt`) in `welcome-images` or `WELCOME_IMAGES_DIR`
+- Optional disable switch via `WELCOME_DISABLE=1`
 - Today's date with ordinal suffixes
 - Environment snapshot (Node.js and Python versions)
 - Session-aware display (shows once per session)
@@ -38,9 +39,10 @@ Personalized terminal greeting with:
 
 Focused helpers for common tasks:
 
-- `venv`: Activate local `./venv`; with `-f` flag, create if missing
+- `venv`: Activate local `./.venv` or `./venv`; with `-f` flag, create `./.venv` if missing
 - `mcd`: Create directory and cd into it
 - `mcode`: Ensure directory exists and open it in VS Code
+- `dc_help`: Show helper usage
 
 ### Installation
 
@@ -91,6 +93,7 @@ Personalized terminal greeting with:
 - Time-of-day adapted greeting
 - ASCII art that changes throughout the day
 - Optional custom ASCII art (`morning.txt`, `afternoon.txt`, `evening.txt`, or `custom.txt`) in `welcome-images` or `WELCOME_IMAGES_DIR`
+- Optional disable switch via `WELCOME_DISABLE=1`
 - Today's date with ordinal suffixes
 - Environment snapshot (Node.js and Python versions)
 - Session-aware display (shows once per session)
@@ -101,9 +104,10 @@ Personalized terminal greeting with:
 
 Focused helpers for common tasks:
 
-- `venv`: Activate local `./venv`; with `-f` flag, create if missing
+- `venv`: Activate local `./.venv` or `./venv`; with `-f` flag, create `./.venv` if missing
 - `mcd`: Create directory and cd into it
 - `mcode`: Ensure directory exists and open it in VS Code
+- `dc_help`: Show helper usage
 
 ### Installation
 

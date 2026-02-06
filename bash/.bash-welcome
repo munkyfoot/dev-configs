@@ -6,14 +6,14 @@
 # Set `WELCOME_USER_NAME` to override the greeting name.
 # Set `WELCOME_IMAGES_DIR` to specify custom art/image directory.
 # Add `morning.txt`/`afternoon.txt`/`evening.txt` or `custom.txt` alongside images.
-# To disable, skip sourcing this file or unset `_WELCOME_PRINTED`.
+# To disable, skip sourcing this file or set `WELCOME_DISABLE=1`.
 
 _BASH_WELCOME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-DC_SHARED_DIR="${DC_SHARED_DIR:-${_BASH_WELCOME_DIR}/../shared}"
-source "${DC_SHARED_DIR}/img2ascii.sh"
-source "${DC_SHARED_DIR}/welcome.sh"
+if [[ $- == *i* ]] && [[ -z "${WELCOME_DISABLE:-}" ]]; then
+  DC_SHARED_DIR="${DC_SHARED_DIR:-${_BASH_WELCOME_DIR}/../shared}"
+  source "${DC_SHARED_DIR}/img2ascii.sh"
+  source "${DC_SHARED_DIR}/welcome.sh"
 
-if [[ $- == *i* ]]; then
   # Guard so sourcing .bashrc twice doesn't reprint
   if [[ -z "${_WELCOME_PRINTED:-}" ]]; then
     _WELCOME_PRINTED=1

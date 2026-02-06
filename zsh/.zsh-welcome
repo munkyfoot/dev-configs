@@ -6,17 +6,17 @@
 # Set `WELCOME_USER_NAME` to override the greeting name.
 # Set `WELCOME_IMAGES_DIR` to specify custom art/image directory.
 # Add `morning.txt`/`afternoon.txt`/`evening.txt` or `custom.txt` alongside images.
-# To disable, skip sourcing this file or unset `_WELCOME_PRINTED`.
+# To disable, skip sourcing this file or set `WELCOME_DISABLE=1`.
 
 # Get the absolute directory where this script is located
 typeset -g _WELCOME_SCRIPT_DIR="${_WELCOME_SCRIPT_DIR:-${${(%):-%x}:A:h}}"
 
-# Shared helpers
-typeset -g DC_SHARED_DIR="${DC_SHARED_DIR:-${_WELCOME_SCRIPT_DIR}/../shared}"
-source "${DC_SHARED_DIR}/img2ascii.sh"
-source "${DC_SHARED_DIR}/welcome.sh"
+if [[ $- == *i* ]] && [[ -z "${WELCOME_DISABLE:-}" ]]; then
+  # Shared helpers
+  typeset -g DC_SHARED_DIR="${DC_SHARED_DIR:-${_WELCOME_SCRIPT_DIR}/../shared}"
+  source "${DC_SHARED_DIR}/img2ascii.sh"
+  source "${DC_SHARED_DIR}/welcome.sh"
 
-if [[ $- == *i* ]]; then
   # Guard so sourcing .zshrc twice doesn't reprint
   if [[ -z "${_WELCOME_PRINTED:-}" ]]; then
     _WELCOME_PRINTED=1
