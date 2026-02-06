@@ -36,13 +36,27 @@ __build_bash_prompt() {
 
 if [[ -z "${_BASH_PROMPT_LOADED:-}" ]]; then
   _BASH_PROMPT_LOADED=1
-  if [[ -n "${PROMPT_COMMAND:-}" ]]; then
-    case ";$PROMPT_COMMAND;" in
-      *";__build_bash_prompt;"*) ;;
-      *) PROMPT_COMMAND="__build_bash_prompt; ${PROMPT_COMMAND}" ;;
-    esac
+  if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then
+    _dc_prompt_builder_found=0
+    for _dc_prompt_cmd in "${PROMPT_COMMAND[@]}"; do
+      if [[ "$_dc_prompt_cmd" == "__build_bash_prompt" ]]; then
+        _dc_prompt_builder_found=1
+        break
+      fi
+    done
+    if (( !_dc_prompt_builder_found )); then
+      PROMPT_COMMAND=("__build_bash_prompt" "${PROMPT_COMMAND[@]}")
+    fi
+    unset _dc_prompt_builder_found _dc_prompt_cmd
   else
-    PROMPT_COMMAND="__build_bash_prompt"
+    if [[ -n "${PROMPT_COMMAND:-}" ]]; then
+      case ";$PROMPT_COMMAND;" in
+        *";__build_bash_prompt;"*) ;;
+        *) PROMPT_COMMAND="__build_bash_prompt; ${PROMPT_COMMAND}" ;;
+      esac
+    else
+      PROMPT_COMMAND="__build_bash_prompt"
+    fi
   fi
 fi
 # --- end ---
