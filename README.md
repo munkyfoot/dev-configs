@@ -126,6 +126,12 @@ Replace `~/path/to/dev-configs/` with the actual path to your config files.
 
 Common logic for prompts, welcome banners, and helpers lives in `shared/` and is sourced by both shells.
 
+## Prompt Guidelines
+
+Agent guidance for this repo lives in `prompts/AGENTS.md`.
+
+It defines general expectations for code quality, workflow, testing, documentation, and safety without prescribing a default application stack.
+
 ## Requirements
 
 - Zsh shell (for zsh configs)
