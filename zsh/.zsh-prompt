@@ -3,7 +3,12 @@
 # - Shows user@host only over SSH.
 # - Appends "+" for staged changes and "*" for unstaged or untracked changes.
 # - Always shows a green caret; color does not reflect exit status.
-# - Refreshes before each prompt (no timer); set DC_PROMPT_GIT=0 to skip git status.
+# - Refreshes before each prompt; set DC_PROMPT_GIT=0 to skip git status.
+# - While idle at the prompt, checks the repository's HEAD file about once a second
+#   and redraws when the branch changes (e.g. checkout in another pane).
+#   Set DC_PROMPT_AUTO_REFRESH=0 to disable. Does not use TMOUT/TRAPALRM.
+# - Rebuilds (including +/* markers) when the terminal regains focus, if it
+#   supports focus reporting. Set DC_PROMPT_FOCUS_REFRESH=0 to disable.
 # Shared helpers
 typeset -g _PROMPT_SCRIPT_DIR="${_PROMPT_SCRIPT_DIR:-${${(%):-%x}:A:h}}"
 typeset -g DC_SHARED_DIR="${DC_SHARED_DIR:-${_PROMPT_SCRIPT_DIR}/../shared}"
@@ -18,6 +23,10 @@ autoload -Uz add-zsh-hook
 
 # Recompute PROMPT before each command via precmd hook
 build_prompt() {
+	# Snapshot HEAD before reading git status, so a checkout that lands while the
+	# prompt is being built still differs from the baseline on the next tick.
+	_dc_prompt_snapshot_head
+
 	local -a segs
 	segs+=('%F{244}%*%f')
 	[[ -n $SSH_PART ]] && segs+=("$SSH_PART")
@@ -47,4 +56,186 @@ build_prompt() {
 }
 
 add-zsh-hook precmd build_prompt
+
+# --- Idle branch refresh ---
+# While ZLE waits for input, a process-substitution ticker writes one byte per
+# second (sleeping in the zselect builtin). Each tick reads HEAD with the read
+# builtin, so idle ticks start no processes; only a changed HEAD rebuilds the
+# prompt. The ticker is stopped explicitly at line-finish, even if another
+# plugin's subprocess inherited its pipe descriptor.
+typeset -g _DC_PROMPT_HEAD_PATH="${_DC_PROMPT_HEAD_PATH:-}"
+typeset -g _DC_PROMPT_HEAD="${_DC_PROMPT_HEAD:-}"
+typeset -g _DC_PROMPT_TICK_FD="${_DC_PROMPT_TICK_FD:-}"
+typeset -g _DC_PROMPT_TICK_PID="${_DC_PROMPT_TICK_PID:-}"
+
+_dc_prompt_auto_refresh_enabled() {
+	[[ ${DC_PROMPT_GIT:-1} != 0 && ${DC_PROMPT_AUTO_REFRESH:-1} != 0 && -o zle ]]
+}
+
+# Sets REPLY to the first line of HEAD file $1; fails if it cannot be read.
+# The content is only compared, never placed in PROMPT or evaluated.
+_dc_prompt_read_head() {
+	REPLY=''
+	[[ -n $1 && -f $1 && -r $1 ]] || return 1
+	IFS= read -r REPLY 2>/dev/null < "$1" || [[ -n $REPLY ]]
+}
+
+# Records the HEAD path (handles subdirectories, .git files and linked
+# worktrees) and its current content as the refresh baseline.
+_dc_prompt_snapshot_head() {
+	_DC_PROMPT_HEAD_PATH=''
+	_DC_PROMPT_HEAD=''
+	_dc_prompt_auto_refresh_enabled || return 0
+	local head_path REPLY
+	head_path="$(git rev-parse --git-path HEAD 2>/dev/null)" || return 0
+	[[ -n $head_path ]] || return 0
+	head_path="${head_path:a}"
+	_dc_prompt_read_head "$head_path" || return 0
+	_DC_PROMPT_HEAD_PATH="$head_path"
+	_DC_PROMPT_HEAD="$REPLY"
+}
+
+_dc_prompt_stop_ticker() {
+	local fd="$_DC_PROMPT_TICK_FD" pid="$_DC_PROMPT_TICK_PID"
+	_DC_PROMPT_TICK_FD=''
+	_DC_PROMPT_TICK_PID=''
+	if [[ -n $fd ]]; then
+		zle -F "$fd" 2>/dev/null
+		{ exec {fd}<&- } 2>/dev/null
+	fi
+	if [[ -n $pid ]]; then
+		kill -TERM -- "$pid" 2>/dev/null
+		wait "$pid" 2>/dev/null
+	fi
+	return 0
+}
+
+_dc_prompt_start_ticker() {
+	_dc_prompt_stop_ticker
+	_dc_prompt_auto_refresh_enabled || return 0
+	# Other ZLE contexts (vared, continuation/select prompts) own their display.
+	[[ ${CONTEXT:-} == start ]] || return 0
+	[[ -n $_DC_PROMPT_HEAD_PATH ]] || return 0
+	zmodload zsh/zselect 2>/dev/null || return 0
+	zmodload zsh/system 2>/dev/null || return 0
+
+	local fd
+	exec {fd}< <(
+		trap - HUP TERM PIPE
+		trap '' INT QUIT
+		while :; do
+			zselect -t 100
+			# 1 is the normal timeout; stop on any error rather than spin.
+			(( $? == 1 )) || exit 0
+			print -n . 2>/dev/null || exit 0
+		done
+	) || return 0
+	_DC_PROMPT_TICK_FD="$fd"
+	_DC_PROMPT_TICK_PID="$sysparams[procsubstpid]"
+	zle -F "$fd" _dc_prompt_on_tick || _dc_prompt_stop_ticker
+	return 0
+}
+
+_dc_prompt_on_tick() {
+	local token REPLY
+	# A second argument reports hup/err/nval; EOF means the ticker exited.
+	if [[ -n ${2:-} ]] || ! read -r -k 1 -u "$1" token 2>/dev/null; then
+		_dc_prompt_stop_ticker
+		return 0
+	fi
+	[[ -n $_DC_PROMPT_HEAD_PATH ]] || return 0
+	_dc_prompt_read_head "$_DC_PROMPT_HEAD_PATH"
+	[[ $REPLY == "$_DC_PROMPT_HEAD" ]] && return 0
+
+	# build_prompt takes a new baseline, so an unchanged HEAD never redraws again.
+	build_prompt
+	[[ -n $_DC_PROMPT_HEAD_PATH ]] || _dc_prompt_stop_ticker
+	zle .reset-prompt
+	zle -R
+}
+
+# --- Focus refresh ---
+# xterm focus reporting (DECSET 1004): the terminal sends ESC[I on focus-in and
+# ESC[O on focus-out. Reporting is enabled only while editing at the main prompt
+# and only when this file's widgets own both sequences in the active keymap, so
+# custom focus bindings are never overridden or fed unexpected events.
+typeset -g _DC_PROMPT_FOCUS_ON="${_DC_PROMPT_FOCUS_ON:-}"
+
+_dc_prompt_focus_enabled() {
+	[[ ${DC_PROMPT_GIT:-1} != 0 && ${DC_PROMPT_FOCUS_REFRESH:-1} != 0 && -o zle \
+		&& -t 1 && ${TERM:-dumb} != dumb && ${CONTEXT:-} == start ]]
+}
+
+_dc_prompt_focus_in() {
+	[[ -n $_DC_PROMPT_FOCUS_ON ]] || return 0
+	_dc_prompt_focus_enabled || return 0
+	build_prompt
+	[[ -n $_DC_PROMPT_HEAD_PATH ]] || _dc_prompt_stop_ticker
+	zle .reset-prompt
+	zle -R
+}
+
+# Focus-out is consumed so it is not inserted as text; no Git work.
+_dc_prompt_focus_out() {
+	return 0
+}
+
+# Succeeds if both focus sequences in the active keymap run our widgets.
+_dc_prompt_focus_bound() {
+	local out
+	[[ -n ${KEYMAP:-} ]] || return 1
+	out="$(bindkey -M "$KEYMAP" '^[[I' && bindkey -M "$KEYMAP" '^[[O')" || return 1
+	[[ $out == *' _dc_prompt_focus_in'$'\n'*' _dc_prompt_focus_out' ]]
+}
+
+_dc_prompt_focus_off() {
+	[[ -n $_DC_PROMPT_FOCUS_ON ]] || return 0
+	_DC_PROMPT_FOCUS_ON=''
+	[[ -t 1 ]] && print -n -- $'\e[?1004l'
+	return 0
+}
+
+# Runs at line-init and keymap-select; reporting follows the current keymap.
+_dc_prompt_focus_update() {
+	if _dc_prompt_focus_enabled && _dc_prompt_focus_bound; then
+		[[ -n $_DC_PROMPT_FOCUS_ON ]] && return 0
+		_DC_PROMPT_FOCUS_ON=1
+		print -n -- $'\e[?1004h'
+	else
+		_dc_prompt_focus_off
+	fi
+	return 0
+}
+
+# Binds the focus sequences in the standard keymaps (main aliases one of them)
+# only where they are unbound or already ours.
+_dc_prompt_bind_focus() {
+	local map seq widget out
+	for map in emacs viins vicmd; do
+		for seq widget in '^[[I' _dc_prompt_focus_in '^[[O' _dc_prompt_focus_out; do
+			out="$(bindkey -M "$map" "$seq" 2>/dev/null)" || continue
+			case $out in
+				*' undefined-key'|*" $widget") bindkey -M "$map" "$seq" "$widget" ;;
+			esac
+		done
+	done
+}
+
+if [[ -o interactive ]]; then
+	autoload -Uz add-zle-hook-widget
+	add-zle-hook-widget line-init _dc_prompt_start_ticker
+	add-zle-hook-widget line-finish _dc_prompt_stop_ticker
+	# Also clean up if an earlier line-finish widget returns before our hook.
+	add-zsh-hook preexec _dc_prompt_stop_ticker
+	add-zsh-hook zshexit _dc_prompt_stop_ticker
+
+	zle -N _dc_prompt_focus_in
+	zle -N _dc_prompt_focus_out
+	_dc_prompt_bind_focus
+	add-zle-hook-widget line-init _dc_prompt_focus_update
+	add-zle-hook-widget keymap-select _dc_prompt_focus_update
+	add-zle-hook-widget line-finish _dc_prompt_focus_off
+	add-zsh-hook preexec _dc_prompt_focus_off
+	add-zsh-hook zshexit _dc_prompt_focus_off
+fi
 # --- end ---

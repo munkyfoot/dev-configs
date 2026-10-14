@@ -12,7 +12,7 @@ SHELLS = [name for name in ("bash", "zsh") if shutil.which(name)]
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
-class ConfigTests(unittest.TestCase):
+class ShellFixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="dev-configs-test-")
         self.addCleanup(self.temp.cleanup)
@@ -67,6 +67,7 @@ class ConfigTests(unittest.TestCase):
         target.chmod(0o755)
         self.env["PATH"] = str(directory) + os.pathsep + os.environ.get("PATH", os.defpath)
 
+class ConfigTests(ShellFixture):
     def test_syntax(self):
         for name in SHELLS:
             for file in list((ROOT / "shared").glob("*.sh")) + list((ROOT / name).glob(".*")):

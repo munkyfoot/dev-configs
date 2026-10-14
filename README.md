@@ -17,7 +17,7 @@ A clean, informative prompt showing:
 - Active Python virtual environment
 - Green caret prompt
 
-Uses helper functions for Git and venv detection, hooks into Zsh's `precmd` for dynamic updates. The prompt (including the clock) is refreshed each time it is drawn; there is no background timer, and any `TRAPALRM`/`TMOUT` you set are left alone. See [Prompt Performance and Safety](#prompt-performance-and-safety).
+Uses helper functions for Git and venv detection, hooks into Zsh's `precmd` for dynamic updates. The full prompt (clock, Git status, venv) is rebuilt each time a new prompt is drawn. While you sit idle at a prompt inside a Git repository, a lightweight check also redraws it within about a second if the branch changes, e.g. after `git checkout` in another pane of the same working tree. In terminals that support focus reporting, the full prompt (including `+`/`*`) is also rebuilt when the terminal regains focus. See [Prompt Performance and Safety](#prompt-performance-and-safety).
 
 ### Custom Welcome
 
@@ -122,7 +122,16 @@ Common logic for prompts, welcome banners, and helpers lives in `shared/` and is
 
 - Git status is read with `git --no-optional-locks status --no-ahead-behind --no-renames --untracked-files=normal`, so the prompt does not take index locks, count ahead/behind commits, or detect renames. Untracked files always set `*`, even if `status.showUntrackedFiles=no` is configured.
 - In very large repositories, set `DC_PROMPT_GIT=0` to skip Git status entirely.
-- After updating from the old timer-based Zsh prompt, open a new shell. Sourcing the new file in an existing shell does not remove timer hooks already loaded by the old version.
+- Zsh idle branch refresh: while the line editor waits for input, a small helper sleeps in Zsh's [`zselect` builtin](https://zsh.sourceforge.io/Doc/Release/Zsh-Modules.html#The-zsh_002fzselect-Module) and wakes the prompt about once a second. Each wake-up only reads the repository's `HEAD` file with a shell builtin (no Git or other process is started); the prompt is rebuilt with full Git status only when `HEAD` changed. The helper runs only at the main command prompt and stops when a command runs or the shell exits; continuation prompts and variable editors are left alone. It does not use `TMOUT`/`TRAPALRM` and leaves your own settings and ZLE widgets in place.
+  - Only branch/HEAD changes are detected while idle. Edits, staging or commits that do not move `HEAD` update the `+`/`*` markers at the next prompt or when the terminal regains focus (below), not continuously.
+  - Separate Git worktrees have independent branches by design; a checkout in one worktree does not change another's prompt.
+  - Set `DC_PROMPT_AUTO_REFRESH=0` to disable it (`DC_PROMPT_GIT=0` disables it too). The change takes effect at the next prompt.
+  - Bash has no equivalent; its prompt refreshes only when a new prompt is drawn.
+- Zsh focus refresh: at the main command prompt, the prompt turns on terminal focus reporting ([xterm mode 1004](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)) and rebuilds itself, including the `+`/`*` markers, each time the terminal regains focus. The command line and cursor are kept; losing focus does nothing. Reporting is turned off before each command runs and in continuation prompts or variable editors.
+  - Your terminal must support focus reporting. [Ghostty implements these events](https://github.com/ghostty-org/ghostty/blob/main/src/terminal/focus.zig). Actual pane/window focus delivery in Ghostty and macOS Terminal has not been verified here; automated tests inject the events into isolated Zsh terminal sessions. In tmux, enable `set -g focus-events on` (see the [tmux wiki](https://github.com/tmux/tmux/wiki/Getting-Started)).
+  - The focus sequences (`^[[I`, `^[[O`) are bound only in the `emacs`, `viins` and `vicmd` keymaps, and only where they are not already bound. Your own focus bindings take precedence: if the active keymap does not use this prompt's widgets for both sequences, reporting stays off for that keymap. To opt a custom keymap in, bind `^[[I` to `_dc_prompt_focus_in` and `^[[O` to `_dc_prompt_focus_out` in it.
+  - Set `DC_PROMPT_FOCUS_REFRESH=0` to disable it (`DC_PROMPT_GIT=0` disables it too); this is independent of `DC_PROMPT_AUTO_REFRESH`. Bash is unchanged.
+- After updating from the original timer-based Zsh prompt (`TRAPALRM`/`TMOUT`), open a new shell. Sourcing the new file in an existing shell does not remove timer hooks already loaded by the old version.
 - Branch, tag, directory and virtualenv names are shown as plain text and never evaluated as prompt code, whether or not Bash `promptvars` or Zsh `PROMPT_SUBST` is enabled.
 - Control characters are removed from Git and virtualenv labels in both shells, and from the Bash directory label (computed in place of `\W`). Zsh uses its native `%1~`, which already escapes control characters and prompt sequences in directory names.
 
