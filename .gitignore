@@ -6,3 +6,6 @@ welcome-images/
 
 # ASCII art cache
 .ascii-cache/
+
+# Python regression-test bytecode
+__pycache__/

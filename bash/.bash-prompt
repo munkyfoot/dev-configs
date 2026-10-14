@@ -1,10 +1,10 @@
 # --- simple, colored prompt with venv, git, SSH user@host when applicable ---
-# Format: "%time [user@host] path git_branch[+*] (venv) ❯"
+# Format: "%time [user@host] dir git_branch[+*] (venv) ❯"
 # - Shows user@host only over SSH.
 # - Appends "+" for staged changes and "*" for unstaged or untracked changes.
-# - Updates on each prompt (no 1s timer in bash).
+# - Updates on each prompt (no timer); set DC_PROMPT_GIT=0 to skip git status.
 
-_BASH_PROMPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+_BASH_PROMPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DC_SHARED_DIR="${DC_SHARED_DIR:-${_BASH_PROMPT_DIR}/../shared}"
 source "${DC_SHARED_DIR}/prompt.sh"
 
@@ -16,47 +16,70 @@ _BASH_C_MAGENTA='\[\e[35m\]'
 _BASH_C_GREEN='\[\e[32m\]'
 
 __build_bash_prompt() {
+  # Runs first in PROMPT_COMMAND; hand the last command's status on to later hooks.
+  local exit_status=$?
+
   local ssh_part=""
   if [[ -n "$SSH_CONNECTION" || -n "$SSH_TTY" ]]; then
     ssh_part='\u@\h'
   fi
 
-  local git venv
-  git="$(prompt_git)"
-  venv="$(prompt_venv)"
+  # Directory, branch and venv names are untrusted text, so they are stored in
+  # variables instead of being spliced into PS1 (where they would be expanded).
+  # Equivalent of \W, computed here so control characters can be filtered.
+  local dir="$PWD"
+  if [[ "$dir" == "$HOME" ]]; then
+    dir='~'
+  elif [[ "$dir" != "/" ]]; then
+    dir="${dir##*/}"
+  fi
+  _DC_PROMPT_DIR="${dir//[[:cntrl:]]/}"
+  _DC_PROMPT_GIT="$(prompt_git)"
+  _DC_PROMPT_VENV="$(prompt_venv)"
+
+  local dir_ref git_ref venv_ref
+  if shopt -q promptvars; then
+    # Values substituted from these references are not expanded again.
+    dir_ref='${_DC_PROMPT_DIR}'
+    git_ref='${_DC_PROMPT_GIT}'
+    venv_ref='${_DC_PROMPT_VENV}'
+  else
+    # No expansion happens; only prompt backslash escapes need neutralizing.
+    local bs='\'
+    dir_ref=${_DC_PROMPT_DIR//"$bs"/"$bs$bs"}
+    git_ref=${_DC_PROMPT_GIT//"$bs"/"$bs$bs"}
+    venv_ref=${_DC_PROMPT_VENV//"$bs"/"$bs$bs"}
+  fi
 
   local segs="${_BASH_C_GRAY}\t${_BASH_C_RESET}"
   [[ -n "$ssh_part" ]] && segs+=" ${ssh_part}"
-  segs+=" ${_BASH_C_BLUE}\W${_BASH_C_RESET}"
-  [[ -n "$git" ]] && segs+=" ${_BASH_C_CYAN}${git}${_BASH_C_RESET}"
-  [[ -n "$venv" ]] && segs+=" ${_BASH_C_MAGENTA}${venv}${_BASH_C_RESET}"
+  segs+=" ${_BASH_C_BLUE}${dir_ref}${_BASH_C_RESET}"
+  [[ -n "$_DC_PROMPT_GIT" ]] && segs+=" ${_BASH_C_CYAN}${git_ref}${_BASH_C_RESET}"
+  [[ -n "$_DC_PROMPT_VENV" ]] && segs+=" ${_BASH_C_MAGENTA}${venv_ref}${_BASH_C_RESET}"
 
   PS1="${segs} ${_BASH_C_GREEN}❯${_BASH_C_RESET} "
+  return "$exit_status"
 }
 
-if [[ -z "${_BASH_PROMPT_LOADED:-}" ]]; then
-  _BASH_PROMPT_LOADED=1
-  if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then
-    _dc_prompt_builder_found=0
-    for _dc_prompt_cmd in "${PROMPT_COMMAND[@]}"; do
-      if [[ "$_dc_prompt_cmd" == "__build_bash_prompt" ]]; then
-        _dc_prompt_builder_found=1
-        break
-      fi
-    done
-    if (( !_dc_prompt_builder_found )); then
-      PROMPT_COMMAND=("__build_bash_prompt" "${PROMPT_COMMAND[@]}")
+# Prepend the builder once; re-sourcing is a no-op if it is already registered.
+if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then
+  _dc_prompt_builder_found=0
+  for _dc_prompt_cmd in "${PROMPT_COMMAND[@]}"; do
+    if [[ "$_dc_prompt_cmd" == "__build_bash_prompt" ]]; then
+      _dc_prompt_builder_found=1
+      break
     fi
-    unset _dc_prompt_builder_found _dc_prompt_cmd
-  else
-    if [[ -n "${PROMPT_COMMAND:-}" ]]; then
-      case ";$PROMPT_COMMAND;" in
-        *";__build_bash_prompt;"*) ;;
-        *) PROMPT_COMMAND="__build_bash_prompt; ${PROMPT_COMMAND}" ;;
-      esac
-    else
-      PROMPT_COMMAND="__build_bash_prompt"
-    fi
+  done
+  if (( !_dc_prompt_builder_found )); then
+    PROMPT_COMMAND=("__build_bash_prompt" "${PROMPT_COMMAND[@]}")
   fi
+  unset _dc_prompt_builder_found _dc_prompt_cmd
+elif [[ -n "${PROMPT_COMMAND:-}" ]]; then
+  case ";$PROMPT_COMMAND;" in
+    *";__build_bash_prompt;"*) ;;
+    *) PROMPT_COMMAND="__build_bash_prompt; ${PROMPT_COMMAND}" ;;
+  esac
+else
+  PROMPT_COMMAND="__build_bash_prompt"
 fi
 # --- end ---

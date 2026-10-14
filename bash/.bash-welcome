@@ -8,7 +8,7 @@
 # Add `morning.txt`/`afternoon.txt`/`evening.txt` or `custom.txt` alongside images.
 # To disable, skip sourcing this file or set `WELCOME_DISABLE=1`.
 
-_BASH_WELCOME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+_BASH_WELCOME_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 if [[ $- == *i* ]] && [[ -z "${WELCOME_DISABLE:-}" ]]; then
   DC_SHARED_DIR="${DC_SHARED_DIR:-${_BASH_WELCOME_DIR}/../shared}"
   source "${DC_SHARED_DIR}/img2ascii.sh"

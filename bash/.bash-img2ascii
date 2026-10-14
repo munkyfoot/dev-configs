@@ -2,7 +2,7 @@
 # --- Image to ASCII Art Converter ---
 # Shared implementation lives in shared/img2ascii.sh
 
-_BASH_IMG2ASCII_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+_BASH_IMG2ASCII_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DC_SHARED_DIR="${DC_SHARED_DIR:-${_BASH_IMG2ASCII_DIR}/../shared}"
 source "${DC_SHARED_DIR}/img2ascii.sh"
 

@@ -1,5 +1,6 @@
 # Shared welcome banner logic for zsh and bash.
-# Expects DC_SHARED_DIR to be set by the caller.
+# Expects DC_SHARED_DIR to be set by the caller. Image art is used only when
+# shared/img2ascii.sh has been sourced first.
 
 # shellcheck disable=SC1090
 source "${DC_SHARED_DIR}/colors.sh"
@@ -75,6 +76,7 @@ _dc_find_custom_image() {
       return 0
     fi
   done
+  return 1
 }
 
 _dc_find_custom_ascii() {
@@ -96,25 +98,34 @@ _dc_find_custom_ascii() {
       return 0
     fi
   done
+  return 1
 }
 
-_dc_file_mtime() {
-  local path="$1"
-  local mtime=""
-  mtime=$(stat -f %m "$path" 2>/dev/null)
-  if [[ -z "$mtime" ]]; then
-    mtime=$(stat -c %Y "$path" 2>/dev/null)
-  fi
-  printf '%s' "$mtime"
+# Prints cached art from $2 if it is a regular, non-empty file not older than image $3.
+# Symlinks are ignored so the cache cannot be redirected elsewhere.
+_dc_welcome_read_cache() {
+  local cache_dir="$1" cache_file="$2" image="$3"
+  [[ ! -L "$cache_dir" && ! -L "$cache_file" && -f "$cache_file" && -s "$cache_file" ]] || return 1
+  [[ "$image" -nt "$cache_file" ]] && return 1
+  printf '%s\n' "$(<"$cache_file")"
 }
 
-_dc_term_width() {
-  local width="${COLUMNS:-}"
-  if [[ -z "$width" ]]; then
-    width="$(tput cols 2>/dev/null)"
-  fi
-  [[ -n "$width" ]] || width=80
-  printf '%s' "$width"
+# Writes $3 to cache file $2 via a private temp file and atomic rename.
+# Refuses symlinks and fails quietly when the directory is not writable.
+_dc_welcome_write_cache() {
+  local cache_dir="$1" cache_file="$2" content="$3"
+  [[ -L "$cache_dir" || -L "$cache_file" || -d "$cache_file" ]] && return 1
+  (
+    umask 077
+    [[ -d "$cache_dir" ]] || mkdir -p -- "$cache_dir" || exit 1
+    [[ -L "$cache_dir" ]] && exit 1
+    tmp_file="$(mktemp -- "${cache_dir}/.cache.XXXXXX")" || exit 1
+    if printf '%s\n' "$content" > "$tmp_file" && mv -f -- "$tmp_file" "$cache_file"; then
+      exit 0
+    fi
+    rm -f -- "$tmp_file"
+    exit 1
+  ) 2>/dev/null
 }
 
 dc_welcome_banner() {
@@ -122,22 +133,24 @@ dc_welcome_banner() {
   local user_name="${WELCOME_USER_NAME:-${USER}}"
   local welcome_images_dir="${WELCOME_IMAGES_DIR:-${script_dir}/welcome-images}"
 
-  # Time-of-day greeting
-  local h part="evening"
-  h=$(date +%H)
+  # Time-of-day greeting (10# keeps "08"/"09" from being read as octal)
+  local h day weekday month part="evening"
+  read -r h day weekday month <<< "$(date '+%H %d %A %B')"
+  h=$((10#$h))
   (( h >= 5 && h < 12 )) && part="morning"
   (( h >= 12 && h < 17 )) && part="afternoon"
 
   # Facts
-  local day suffix today
-  day=$((10#$(date +%d)))
+  local suffix today
+  day=$((10#$day))
   suffix=$(_dc_ordinal_suffix "$day")
-  today="$(date '+%A, %B') $day$suffix"
+  today="$weekday, $month $day$suffix"
 
   local nodev="N/A" pyv="N/A"
   command -v node >/dev/null 2>&1 && nodev=$(node -v)
   if command -v python3 >/dev/null 2>&1; then
-    pyv=$(python3 -V 2>&1 | sed 's/Python /v/')
+    pyv=$(python3 -V 2>&1)
+    pyv="v${pyv#Python }"
   fi
 
   # ASCII art header (time-of-day)
@@ -156,36 +169,21 @@ dc_welcome_banner() {
   custom_image=$(_dc_find_custom_image "$welcome_images_dir" "$part")
 
   if [[ -n "$custom_ascii" ]]; then
-    cat "$custom_ascii"
+    cat -- "$custom_ascii"
   elif [[ -n "$custom_image" ]] && command -v img2ascii >/dev/null 2>&1; then
     local cache_dir="${welcome_images_dir}/.ascii-cache"
-    local image_basename cache_file ascii_art need_generate=0
-    local term_width
+    local cache_file ascii_art="" width
 
-    term_width=$(_dc_term_width)
-    image_basename=$(basename "$custom_image")
-    image_basename="${image_basename%.*}"
-    cache_file="${cache_dir}/${image_basename}_w${term_width}.txt"
+    # Same bounded width img2ascii uses; the key keeps the extension so
+    # custom.png and custom.jpg do not share a cache entry.
+    width=$(_dc_img2ascii_default_width)
+    cache_file="${cache_dir}/${custom_image##*/}_w${width}.txt"
 
-    if [[ -f "$cache_file" ]]; then
-      local image_mtime cache_mtime
-      image_mtime=$(_dc_file_mtime "$custom_image")
-      cache_mtime=$(_dc_file_mtime "$cache_file")
-      if [[ -n "$image_mtime" && -n "$cache_mtime" && "$image_mtime" -gt "$cache_mtime" ]]; then
-        need_generate=1
-      else
-        ascii_art=$(<"$cache_file")
-      fi
-    else
-      need_generate=1
-    fi
-
-    if (( need_generate )); then
-      ascii_art=$(img2ascii "$custom_image" "$term_width" 2>/dev/null)
-      if [[ -n "$ascii_art" ]]; then
-        [[ -d "$cache_dir" ]] || mkdir -p "$cache_dir"
-        printf '%s' "$ascii_art" > "$cache_file"
-      fi
+    ascii_art=$(_dc_welcome_read_cache "$cache_dir" "$cache_file" "$custom_image")
+    if [[ -z "$ascii_art" ]]; then
+      ascii_art=$(img2ascii "$custom_image" "$width" 2>/dev/null) || ascii_art=""
+      # Caching is best effort; the art is still shown if the write fails.
+      [[ -n "$ascii_art" ]] && _dc_welcome_write_cache "$cache_dir" "$cache_file" "$ascii_art"
     fi
 
     if [[ -n "$ascii_art" ]]; then
