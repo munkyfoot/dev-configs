@@ -3,6 +3,7 @@ import errno
 import fcntl
 import os
 import pty
+import re
 import select
 import shlex
 import shutil
@@ -100,15 +101,22 @@ class PromptRefreshTests(ShellFixture):
         return terminal
 
     def instrument_git(self):
-        bindir = self.work / ".git" / "test-bin"
+        metadata = self.work / ".git" if (self.work / ".git").exists() else self.work
+        bindir = metadata / "test-bin"
         bindir.mkdir()
-        self.git_log = self.work / ".git" / "git-calls"
+        self.git_log = metadata / "git-calls"
         binary = bindir / "git"
         binary.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$GIT_CALL_LOG"\nexec '
                           + shlex.quote(shutil.which("git")) + ' "$@"\n')
         binary.chmod(0o755)
         self.env["GIT_CALL_LOG"] = str(self.git_log)
         self.env["PATH"] = str(bindir) + os.pathsep + self.env["PATH"]
+
+    def expect_clock_ticks(self, terminal):
+        output = terminal.read_for(2.3)
+        times = set(re.findall(r"\b\d{1,2}:\d{2}:\d{2}\b", output))
+        self.assertGreaterEqual(len(times), 2, f"Clock did not tick: {output!r}")
+        return output
 
     def test_branch_switch_updates_other_pane_without_enter_preserving_cursor(self):
         self.init_repo()
@@ -125,14 +133,65 @@ class PromptRefreshTests(ShellFixture):
         second.expect(" test ")
         self.assertEqual((self.work / ".git" / "buffer-result").read_text(), "abc")
 
-    def test_unchanged_repo_does_not_run_git_while_idle(self):
+    def test_clock_ticks_without_git_calls_preserving_buffer_and_cursor(self):
         self.init_repo()
         self.instrument_git()
         terminal = self.start_terminal()
         terminal.expect(" main ")
+        terminal.send("printf ac\x02")
+        terminal.read_for(0.1)
         initial_calls = self.git_log.read_text()
-        terminal.read_for(2.2)
+        self.expect_clock_ticks(terminal)
         self.assertEqual(self.git_log.read_text(), initial_calls)
+        terminal.send("b\x05 > .git/clock-buffer-result\n")
+        terminal.expect(" main ")
+        self.assertEqual((self.work / ".git" / "clock-buffer-result").read_text(), "abc")
+
+    def test_clock_ticks_outside_git_even_after_focus_refresh(self):
+        self.instrument_git()
+        terminal = self.start_terminal()
+        terminal.expect(" ❯ ")
+        initial_calls = self.git_log.read_text()
+        self.expect_clock_ticks(terminal)
+        self.assertEqual(self.git_log.read_text(), initial_calls)
+        terminal.send("\x1b[I")
+        terminal.expect(" ❯ ")
+        after_focus = self.git_log.read_text()
+        self.expect_clock_ticks(terminal)
+        self.assertEqual(self.git_log.read_text(), after_focus)
+
+    def test_clock_can_be_disabled_without_disabling_branch_refresh(self):
+        self.init_repo()
+        terminal = self.start_terminal(env={"DC_PROMPT_CLOCK_REFRESH": "0"})
+        terminal.expect(" main ")
+        self.assertNotRegex(terminal.read_for(1.3), r"\d{1,2}:\d{2}:\d{2}")
+        self.git("switch", "-qc", "test")
+        terminal.expect(" test ")
+
+    def test_disabling_clock_and_branch_refresh_starts_no_idle_handler(self):
+        self.init_repo()
+        terminal = self.start_terminal(env={"DC_PROMPT_CLOCK_REFRESH": "0",
+                                            "DC_PROMPT_AUTO_REFRESH": "0"})
+        terminal.expect(" main ")
+        terminal.send('observe_idle() { zle -F -L > "$HOME/.git/idle-handlers"; }; '
+                      'add-zle-hook-widget line-init observe_idle\n')
+        terminal.expect(" main ")
+        self.assertEqual((self.work / ".git" / "idle-handlers").read_text(), "")
+        self.assertNotRegex(terminal.read_for(1.3), r"\d{1,2}:\d{2}:\d{2}")
+        (self.work / "tracked").write_text("changed\n")
+        terminal.send("\x1b[I")
+        terminal.expect(" main* ")  # Focus refresh is independent too.
+
+    def test_clock_preserves_previous_command_exit_status(self):
+        self.init_repo()
+        terminal = self.start_terminal()
+        terminal.expect(" main ")
+        terminal.send("false\n")
+        terminal.expect(" main ")
+        self.expect_clock_ticks(terminal)
+        terminal.send('print -r -- "$?" > .git/clock-exit-status\n')
+        terminal.expect(" main ")
+        self.assertEqual((self.work / ".git" / "clock-exit-status").read_text().strip(), "1")
 
     def test_focus_refreshes_external_staged_and_unstaged_changes_without_idle_scans(self):
         self.init_repo()
@@ -193,6 +252,7 @@ class PromptRefreshTests(ShellFixture):
         terminal.read_for(0.4)
         self.assertNotIn("\x1b[?1004h", terminal.output)
         self.assertFalse(self.git_log.exists())
+        self.expect_clock_ticks(terminal)
         terminal.send("\x1b[O\x1b[I")
         terminal.read_for(0.2)
         self.assertFalse(self.git_log.exists())
@@ -338,7 +398,7 @@ bindkey -M vicmd '^[[O' user_focus_out
         terminal = self.start_terminal(env={"DC_PROMPT_AUTO_REFRESH": "0"})
         terminal.expect(" main ")
         self.git("switch", "-qc", "test")
-        self.assertNotIn(" test ", terminal.read_for(1.3))
+        self.assertNotIn(" test ", self.expect_clock_ticks(terminal))
         terminal.send("\n")
         terminal.expect(" test ")
 
@@ -362,6 +422,7 @@ bindkey -M vicmd '^[[O' user_focus_out
         branch = "evil$(>PROMPT_EXECUTED)"
         self.git("switch", "-qc", branch)
         terminal.expect(" " + branch + " ")
+        self.expect_clock_ticks(terminal)
         self.assertFalse((self.work / "PROMPT_EXECUTED").exists())
 
     def test_repeated_source_preserves_widgets_and_closes_idle_handler_for_commands(self):
@@ -434,6 +495,7 @@ TMOUT=123
         terminal.send("value=hello; vared -p 'EDIT> ' value\n")
         terminal.expect("EDIT> hello")
         self.assertEqual((self.work / ".git" / "vared-handlers").read_text(), "")
+        self.assertNotRegex(terminal.read_for(1.3), r"\d{1,2}:\d{2}:\d{2}")
         terminal.send("\n")
         terminal.expect(" main ")
 

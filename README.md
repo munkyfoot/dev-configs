@@ -77,12 +77,13 @@ Import [`themes/Custom.terminal`](themes/Custom.terminal) from macOS Terminal's 
 | Trigger | Zsh | Bash | What is checked |
 | --- | --- | --- | --- |
 | A new prompt is drawn (after each command or Enter) | ✓ | ✓ | Everything, including `+`/`*` |
+| Idle at the prompt, every second | ✓ | – | Nothing: the existing prompt is redrawn so the clock ticks |
 | Idle at the prompt and the branch changes (e.g. `git checkout` in another pane of the same working tree) | ✓ within about 1 second | – | Branch; then a full refresh |
 | The terminal window or pane regains focus | ✓ if the terminal supports focus reporting | – | Everything, including `+`/`*` |
 
-The repository is never scanned continuously. Zsh's idle check only re-reads the working tree's small `HEAD` file about once a second using shell builtins; a change triggers a full Git status refresh. File edits, staging and commits made elsewhere that leave that file unchanged update `+`/`*` at the next prompt or on focus-in. The command line and cursor position are preserved when the prompt redraws.
+The repository is never scanned continuously. The clock redraw only re-displays the prompt already built (Git branch, markers and venv as of the last refresh); it runs no Git or other external commands and works outside repositories and regardless of the Git settings. Zsh's idle branch check only re-reads the working tree's small `HEAD` file about once a second using shell builtins; a change triggers a full Git status refresh. File edits, staging and commits made elsewhere that leave that file unchanged update `+`/`*` at the next prompt or on focus-in. The command line and cursor position are preserved when the prompt redraws.
 
-Idle and focus refresh are active only while editing at the main prompt, not while a command runs or at continuation (`PS2`) and `vared` prompts. Neither uses `TMOUT` or `TRAPALRM`, and existing ZLE widgets and hooks are kept.
+The clock, idle branch check and focus refresh are active only while editing at the main prompt, not while a command runs or at continuation (`PS2`) and `vared` prompts. None of them uses `TMOUT` or `TRAPALRM`, and existing ZLE widgets and hooks are kept.
 
 ### Performance and safety
 
@@ -152,15 +153,16 @@ Set these before the relevant `source` lines in your startup file. Plain shell v
 | `WELCOME_DISABLE` | unset | Any non-empty value skips the banner. | When the welcome file is sourced |
 | `WELCOME_USER_NAME` | `$USER` | Name used in the greeting. | When the welcome file is sourced |
 | `WELCOME_IMAGES_DIR` | `welcome-images/` next to the shell's welcome file | Directory for custom art and images. | When the welcome file is sourced |
-| `DC_PROMPT_GIT` | on | `0` removes the Git segment and disables idle and focus refresh. Use in very large repositories. | Every prompt |
-| `DC_PROMPT_AUTO_REFRESH` | on | `0` disables Zsh's idle branch check. | Every prompt |
+| `DC_PROMPT_GIT` | on | `0` removes the Git segment and disables the idle branch check and focus refresh (the clock keeps ticking). Use in very large repositories. | Every prompt |
+| `DC_PROMPT_CLOCK_REFRESH` | on | `0` stops Zsh's once-a-second clock redraw; the time then updates only when the prompt is refreshed. | Every prompt |
+| `DC_PROMPT_AUTO_REFRESH` | on | `0` disables Zsh's idle branch check (the clock keeps ticking). | Every prompt |
 | `DC_PROMPT_FOCUS_REFRESH` | on | `0` disables Zsh's focus-in refresh (independent of `DC_PROMPT_AUTO_REFRESH`). | Every prompt |
 
 `DC_SHARED_DIR` overrides where the wrappers look for `shared/`; it is normally derived automatically and does not need to be set.
 
 ## Requirements
 
-- Zsh and/or Bash. Shared code is written to avoid Bash 4-only features, since macOS ships Bash 3.2. Zsh idle refresh uses ZLE hooks and the `zsh/zselect` and `zsh/system` modules; if they cannot be loaded, the prompt still refreshes at each new prompt.
+- Zsh and/or Bash. Shared code is written to avoid Bash 4-only features, since macOS ships Bash 3.2. Zsh's ticking clock and idle branch check use ZLE hooks and the `zsh/zselect` and `zsh/system` modules; if they cannot be loaded, the prompt still refreshes at each new prompt.
 - Git 2.18 or newer for the Git segment ([`git status` options used](https://git-scm.com/docs/git-status/2.18.0)). Without Git the segment is omitted.
 - Optional: Python 3 (`venv -f`, banner version, tests), Node.js (banner version), ImageMagick (image art and `img2ascii`), VS Code's `code` command (`mcode`).
 
@@ -180,6 +182,8 @@ Set these before the relevant `source` lines in your startup file. Plain shell v
 **The branch doesn't update in another pane.** Idle refresh only follows the same working tree; separate Git worktrees have independent branches by design. It also doesn't run while a command is executing, and it is Zsh-only (Bash updates at the next prompt).
 
 **The prompt still behaves like the old timer version.** After updating from the original version that used `TRAPALRM`/`TMOUT`, open a new shell; re-sourcing does not remove timers already loaded in an existing session.
+
+**The clock doesn't tick.** It only ticks in Zsh while idle at the main prompt (not during commands, continuation or `vared` prompts). Check that `DC_PROMPT_CLOCK_REFRESH` is not `0`. Bash shows the time the prompt was drawn.
 
 **The prompt is slow in a huge repository.** Set `DC_PROMPT_GIT=0`.
 

@@ -36,15 +36,17 @@ Install at least one of Bash or Zsh; use both to cover both sets of wrappers. Na
 - Each test creates its repositories, images and stub commands (for example a logging `git` wrapper on `PATH`) inside that temporary directory, which is removed afterwards.
 - Interactive prompt tests run `zsh -f -i` in pseudo-terminals they own and shut down only those sessions.
 
-## What the focus tests cover
+## What the interactive tests cover
 
 `test_prompt_refresh.py` writes the focus sequences (`ESC[I`, `ESC[O`) directly into a pseudo-terminal and checks the shell's response: when reporting is turned on and off, the redrawn prompt, preserved command line, and how often Git runs. It does not exercise a real terminal emulator, so whether a particular app or tmux actually delivers focus events has to be checked by hand.
+
+Clock checks observe changing timestamps while the shell is idle and verify that no extra Git calls occur. They cover preserved text, cursor position and exit status, ticking outside repositories and with Git disabled, and independent clock/branch opt-outs. Lifecycle tests check that the shared ticker stops for commands, variable editors and shell exit.
 
 ## Manual smoke check
 
 Use a disposable Git repository with one committed file and no pending changes. Load the Zsh prompt in both terminals (and enable `set -g focus-events on` if using tmux):
 
-1. Open two panes or windows in the same Git working tree and leave one idle at its prompt, optionally with some text typed.
+1. Open two panes or windows in the same Git working tree and leave one idle at its prompt, optionally with some text typed. The clock should advance each second without moving the cursor or changing the text.
 2. In the other, run `git switch -c smoke-test`. Within about a second the idle prompt should show `smoke-test` without pressing Enter, with the typed text intact.
 3. Edit a tracked file from the active pane, then focus the idle pane. Its prompt should gain `*`; after `git add` and refocusing, `+`.
 4. Restore the scratch file to its committed contents in both the index and working tree, then focus the idle pane again. Both markers should disappear. Discard the scratch repository when finished.

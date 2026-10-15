@@ -4,9 +4,11 @@
 # - Appends "+" for staged changes and "*" for unstaged or untracked changes.
 # - Always shows a green caret; color does not reflect exit status.
 # - Refreshes before each prompt; set DC_PROMPT_GIT=0 to skip git status.
-# - While idle at the prompt, checks the repository's HEAD file about once a second
-#   and redraws when the branch changes (e.g. checkout in another pane).
-#   Set DC_PROMPT_AUTO_REFRESH=0 to disable. Does not use TMOUT/TRAPALRM.
+# - While idle at the prompt, redraws the cached prompt once a second so the clock
+#   ticks (no Git or external commands). Set DC_PROMPT_CLOCK_REFRESH=0 to disable.
+# - On the same tick, checks the repository's HEAD file and rebuilds when the
+#   branch changes (e.g. checkout in another pane).
+#   Set DC_PROMPT_AUTO_REFRESH=0 to disable. Neither uses TMOUT/TRAPALRM.
 # - Rebuilds (including +/* markers) when the terminal regains focus, if it
 #   supports focus reporting. Set DC_PROMPT_FOCUS_REFRESH=0 to disable.
 # Shared helpers
@@ -57,12 +59,13 @@ build_prompt() {
 
 add-zsh-hook precmd build_prompt
 
-# --- Idle branch refresh ---
+# --- Idle clock and branch refresh ---
 # While ZLE waits for input, a process-substitution ticker writes one byte per
-# second (sleeping in the zselect builtin). Each tick reads HEAD with the read
-# builtin, so idle ticks start no processes; only a changed HEAD rebuilds the
-# prompt. The ticker is stopped explicitly at line-finish, even if another
-# plugin's subprocess inherited its pipe descriptor.
+# second (sleeping in the zselect builtin). Each tick redraws the existing PROMPT
+# so %* shows the current time, and reads HEAD with the read builtin; idle ticks
+# start no processes, and only a changed HEAD rebuilds the prompt (Git status).
+# The ticker is stopped explicitly at line-finish, even if another plugin's
+# subprocess inherited its pipe descriptor.
 typeset -g _DC_PROMPT_HEAD_PATH="${_DC_PROMPT_HEAD_PATH:-}"
 typeset -g _DC_PROMPT_HEAD="${_DC_PROMPT_HEAD:-}"
 typeset -g _DC_PROMPT_TICK_FD="${_DC_PROMPT_TICK_FD:-}"
@@ -70,6 +73,17 @@ typeset -g _DC_PROMPT_TICK_PID="${_DC_PROMPT_TICK_PID:-}"
 
 _dc_prompt_auto_refresh_enabled() {
 	[[ ${DC_PROMPT_GIT:-1} != 0 && ${DC_PROMPT_AUTO_REFRESH:-1} != 0 && -o zle ]]
+}
+
+# Clock redraws are independent of Git settings.
+_dc_prompt_clock_enabled() {
+	[[ ${DC_PROMPT_CLOCK_REFRESH:-1} != 0 && -o zle ]]
+}
+
+# Succeeds if idle ticks have work: a clock redraw or a tracked HEAD.
+_dc_prompt_ticker_needed() {
+	_dc_prompt_clock_enabled && return 0
+	_dc_prompt_auto_refresh_enabled && [[ -n $_DC_PROMPT_HEAD_PATH ]]
 }
 
 # Sets REPLY to the first line of HEAD file $1; fails if it cannot be read.
@@ -112,10 +126,9 @@ _dc_prompt_stop_ticker() {
 
 _dc_prompt_start_ticker() {
 	_dc_prompt_stop_ticker
-	_dc_prompt_auto_refresh_enabled || return 0
 	# Other ZLE contexts (vared, continuation/select prompts) own their display.
 	[[ ${CONTEXT:-} == start ]] || return 0
-	[[ -n $_DC_PROMPT_HEAD_PATH ]] || return 0
+	_dc_prompt_ticker_needed || return 0
 	zmodload zsh/zselect 2>/dev/null || return 0
 	zmodload zsh/system 2>/dev/null || return 0
 
@@ -143,13 +156,22 @@ _dc_prompt_on_tick() {
 		_dc_prompt_stop_ticker
 		return 0
 	fi
-	[[ -n $_DC_PROMPT_HEAD_PATH ]] || return 0
-	_dc_prompt_read_head "$_DC_PROMPT_HEAD_PATH"
-	[[ $REPLY == "$_DC_PROMPT_HEAD" ]] && return 0
 
-	# build_prompt takes a new baseline, so an unchanged HEAD never redraws again.
-	build_prompt
-	[[ -n $_DC_PROMPT_HEAD_PATH ]] || _dc_prompt_stop_ticker
+	local redraw=0
+	if [[ -n $_DC_PROMPT_HEAD_PATH ]]; then
+		_dc_prompt_read_head "$_DC_PROMPT_HEAD_PATH"
+		if [[ $REPLY != "$_DC_PROMPT_HEAD" ]]; then
+			# build_prompt takes a new baseline (or clears it if HEAD is gone),
+			# so an unchanged HEAD never rebuilds again.
+			build_prompt
+			redraw=1
+		fi
+	fi
+	# The clock only needs PROMPT re-expanded; no rebuild.
+	_dc_prompt_clock_enabled && redraw=1
+
+	_dc_prompt_ticker_needed || _dc_prompt_stop_ticker
+	(( redraw )) || return 0
 	zle .reset-prompt
 	zle -R
 }
@@ -170,7 +192,8 @@ _dc_prompt_focus_in() {
 	[[ -n $_DC_PROMPT_FOCUS_ON ]] || return 0
 	_dc_prompt_focus_enabled || return 0
 	build_prompt
-	[[ -n $_DC_PROMPT_HEAD_PATH ]] || _dc_prompt_stop_ticker
+	# Outside a repository the clock may still need the ticker.
+	_dc_prompt_ticker_needed || _dc_prompt_stop_ticker
 	zle .reset-prompt
 	zle -R
 }
